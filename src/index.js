@@ -1,10 +1,15 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, Tray, Menu } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const axios = require("axios");
 const sql = require("mssql");
 const { print } = require("pdf-to-printer");
+
+app.setPath(
+  "userData",
+  path.join(app.getPath("temp"), "my-electron-app-cache")
+);
 
 // SQL Server configuration
 const config = {
@@ -19,6 +24,7 @@ const config = {
 };
 
 let mainWindow;
+let tray;
 
 // Function to check and print PDF
 const checkAndPrintPDF = async () => {
@@ -26,13 +32,19 @@ const checkAndPrintPDF = async () => {
     await sql.connect(config);
     const pcName = os.hostname();
     const result =
-      await sql.query`SELECT * FROM print_requests WHERE pc_name = ${pcName} AND status = 'pending'`;
+      await sql.query`SELECT * FROM print_requests WHERE pc_name = ${pcName}`;
+
+    // console.log("Records from DB:", result.recordset);
 
     // Send the records to the renderer process
     mainWindow.webContents.send("update-records", result.recordset);
 
-    for (const record of result.recordset) {
-      const url = `http://127.0.0.1:8025${record.file_path}`;
+    const pendingRecords = result.recordset.filter(
+      (record) => record.status === "pending"
+    );
+
+    for (const record of pendingRecords) {
+      const url = `http://laravel-test${record.file_path}`;
       const localFilePath = path.join(os.tmpdir(), record.file_name);
 
       // Download the PDF file
@@ -77,14 +89,16 @@ const checkAndPrintPDF = async () => {
   }
 };
 
-// Schedule to run every 2.5ms
-setInterval(checkAndPrintPDF, 2500);
+// Schedule to run every minute
+setInterval(checkAndPrintPDF, 60000);
 
-// Create window
+// Create hidden window
 const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
+    show: false, // Do not show the window
+    skipTaskbar: true, // Do not show in the taskbar
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -94,10 +108,59 @@ const createWindow = () => {
   });
 
   mainWindow.loadFile(path.join(__dirname, "index.html"));
+
+  mainWindow.on("minimize", (event) => {
+    event.preventDefault();
+    mainWindow.hide();
+  });
+
+  mainWindow.on("close", (event) => {
+    if (!app.isQuiting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+
+    return false;
+  });
+};
+
+// Create tray
+const createTray = () => {
+  const iconPath = path.join(__dirname, "..", "assets", "icon", "icon.png"); // Ensure this path is correct
+  if (fs.existsSync(iconPath)) {
+    tray = new Tray(iconPath);
+
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: "Show App",
+        click: () => {
+          mainWindow.show();
+        },
+      },
+      {
+        label: "Quit",
+        click: () => {
+          app.isQuiting = true;
+          app.quit();
+        },
+      },
+    ]);
+
+    tray.setToolTip("My Electron App");
+    tray.setContextMenu(contextMenu);
+
+    tray.on("click", () => {
+      mainWindow.show();
+    });
+  } else {
+    console.error(`Failed to load image from path '${iconPath}'`);
+  }
 };
 
 app.whenReady().then(() => {
   createWindow();
+  createTray();
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

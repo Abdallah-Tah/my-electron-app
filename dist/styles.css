@@ -601,6 +601,10 @@ video {
   display: table;
 }
 
+.hidden {
+  display: none;
+}
+
 .min-w-full {
   min-width: 100%;
 }

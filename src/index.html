@@ -25,21 +25,25 @@
       const fileList = document.getElementById("file-list");
 
       window.electron.updateRecords((event, records) => {
+        // console.log("Received records:", records);
         fileList.innerHTML = "";
         records.forEach((record) => {
           const row = document.createElement("tr");
           row.id = `file-${record.id}`;
           row.innerHTML = `
-                    <td class="py-2 px-4 border-b">${record.id}</td>
-                    <td class="py-2 px-4 border-b">${record.file_name}</td>
-                    <td class="py-2 px-4 border-b" id="status-${record.id}">${record.status}</td>
-                    <td class="py-2 px-4 border-b"><button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" onclick="reprint(${record.id})">Reprint</button></td>
-                `;
+          <td class="py-2 px-4 border-b">${record.id}</td>
+          <td class="py-2 px-4 border-b">${record.file_name}</td>
+          <td class="py-2 px-4 border-b" id="status-${record.id}">${record.status}</td>
+          <td class="py-2 px-4 border-b">
+            <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" onclick="reprint(${record.id})">Retry</button>
+          </td>
+        `;
           fileList.appendChild(row);
         });
       });
 
       window.electron.updateStatus((event, data) => {
+        // console.log("Received update-status:", data);
         const statusElement = document.getElementById(`status-${data.id}`);
         if (statusElement) {
           statusElement.innerText = data.status;
