@@ -1,14 +1,17 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
+const fs = require("fs");
+const os = require("os");
+const axios = require("axios");
 const sql = require("mssql");
 const { print } = require("pdf-to-printer");
 
 // SQL Server configuration
 const config = {
-  user: "your-username",
-  password: "your-password",
-  server: "your-server-address", // Replace with your actual server address
-  database: "your-database-name",
+  user: "laravel_test",
+  password: "password",
+  server: "BKAVXSQL",
+  database: "LARAVEL_TEST",
   options: {
     encrypt: true,
     trustServerCertificate: true,
@@ -21,27 +24,52 @@ let mainWindow;
 const checkAndPrintPDF = async () => {
   try {
     await sql.connect(config);
-    const pcName = require("os").hostname();
+    const pcName = os.hostname();
     const result =
-      await sql.query`SELECT * FROM your_table WHERE pc_name = ${pcName} AND status = 'pending'`;
+      await sql.query`SELECT * FROM print_requests WHERE pc_name = ${pcName} AND status = 'pending'`;
+
+    // Send the records to the renderer process
+    mainWindow.webContents.send("update-records", result.recordset);
 
     for (const record of result.recordset) {
-      const filePath = path.join(record.pdf_path, record.file_name);
-      print(filePath)
-        .then(() => {
-          console.log(`Printed: ${filePath}`);
-          mainWindow.webContents.send("update-status", {
-            id: record.id,
-            status: "printed",
-          });
-          sql.query`UPDATE your_table SET status = 'printed' WHERE id = ${record.id}`;
+      const url = `http://127.0.0.1:8025${record.file_path}`;
+      const localFilePath = path.join(os.tmpdir(), record.file_name);
+
+      // Download the PDF file
+      const response = await axios({
+        url,
+        method: "GET",
+        responseType: "stream",
+      });
+
+      response.data
+        .pipe(fs.createWriteStream(localFilePath))
+        .on("finish", async () => {
+          try {
+            // Print the downloaded PDF file
+            await print(localFilePath);
+            console.log(`Printed: ${localFilePath}`);
+            mainWindow.webContents.send("update-status", {
+              id: record.id,
+              status: "completed",
+            });
+            await sql.query`UPDATE print_requests SET status = 'completed' WHERE id = ${record.id}`;
+          } catch (err) {
+            console.error(err);
+            mainWindow.webContents.send("update-status", {
+              id: record.id,
+              status: "failed",
+            });
+            await sql.query`UPDATE print_requests SET status = 'failed' WHERE id = ${record.id}`;
+          }
         })
-        .catch((err) => {
-          console.error(err);
+        .on("error", async (err) => {
+          console.error("Error downloading file:", err);
           mainWindow.webContents.send("update-status", {
             id: record.id,
-            status: "error",
+            status: "failed",
           });
+          await sql.query`UPDATE print_requests SET status = 'failed' WHERE id = ${record.id}`;
         });
     }
   } catch (err) {
@@ -49,8 +77,8 @@ const checkAndPrintPDF = async () => {
   }
 };
 
-// Schedule to run every minute
-setInterval(checkAndPrintPDF, 60000);
+// Schedule to run every 2.5ms
+setInterval(checkAndPrintPDF, 2500);
 
 // Create window
 const createWindow = () => {
@@ -82,7 +110,7 @@ app.on("window-all-closed", () => {
 ipcMain.on("reprint", async (event, id) => {
   try {
     await sql.connect(config);
-    await sql.query`UPDATE your_table SET status = 'pending' WHERE id = ${id}`;
+    await sql.query`UPDATE print_requests SET status = 'pending' WHERE id = ${id}`;
     checkAndPrintPDF(); // Trigger immediate check after reprint request
   } catch (err) {
     console.error(err);

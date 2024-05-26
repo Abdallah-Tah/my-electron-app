@@ -1,10 +1,7 @@
-window.addEventListener("DOMContentLoaded", () => {
-  const replaceText = (selector, text) => {
-    const element = document.getElementById(selector);
-    if (element) element.innerText = text;
-  };
+const { contextBridge, ipcRenderer } = require("electron");
 
-  for (const type of ["chrome", "node", "electron"]) {
-    replaceText(`${type}-version`, process.versions[type]);
-  }
+contextBridge.exposeInMainWorld("electron", {
+  updateRecords: (callback) => ipcRenderer.on("update-records", callback),
+  updateStatus: (callback) => ipcRenderer.on("update-status", callback),
+  reprint: (id) => ipcRenderer.send("reprint", id),
 });

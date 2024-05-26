@@ -24,20 +24,25 @@
     <script>
       const fileList = document.getElementById("file-list");
 
-      window.electron.updateStatus((event, data) => {
-        let row = document.getElementById(`file-${data.id}`);
-        if (!row) {
-          row = document.createElement("tr");
-          row.id = `file-${data.id}`;
+      window.electron.updateRecords((event, records) => {
+        fileList.innerHTML = "";
+        records.forEach((record) => {
+          const row = document.createElement("tr");
+          row.id = `file-${record.id}`;
           row.innerHTML = `
-                    <td class="py-2 px-4 border-b">${data.id}</td>
-                    <td class="py-2 px-4 border-b">${data.file_name}</td>
-                    <td class="py-2 px-4 border-b" id="status-${data.id}">${data.status}</td>
-                    <td class="py-2 px-4 border-b"><button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" onclick="reprint(${data.id})">Reprint</button></td>
+                    <td class="py-2 px-4 border-b">${record.id}</td>
+                    <td class="py-2 px-4 border-b">${record.file_name}</td>
+                    <td class="py-2 px-4 border-b" id="status-${record.id}">${record.status}</td>
+                    <td class="py-2 px-4 border-b"><button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" onclick="reprint(${record.id})">Reprint</button></td>
                 `;
           fileList.appendChild(row);
-        } else {
-          document.getElementById(`status-${data.id}`).innerText = data.status;
+        });
+      });
+
+      window.electron.updateStatus((event, data) => {
+        const statusElement = document.getElementById(`status-${data.id}`);
+        if (statusElement) {
+          statusElement.innerText = data.status;
         }
       });
 
